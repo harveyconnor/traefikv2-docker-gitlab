@@ -1,0 +1,52 @@
+version: "3.5"
+
+services:
+  reverse-proxy:
+    container_name: reverse-proxy
+    image: traefik:v2.1
+    restart: always
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.ssh.address=:2222
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      # - --certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      - --providers.docker
+      - --api
+      - --providers.docker.exposedByDefault=false
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      traefik-proxy:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt/acme.json:/acme.json
+    labels:
+      - traefik.enable=true
+      # Secure dashboard
+      - traefik.http.routers.traefik.rule=Host(${TRAEFIK_DOMAIN})
+      - traefik.http.routers.traefik.service=api@internal
+      # ENABLE THIS FOR BASIC AUTH
+      #- traefik.http.routers.traefik.middlewares=admin
+      - traefik.http.routers.traefik.tls.certresolver=le
+      - traefik.http.routers.traefik.entrypoints=websecure
+      #- traefik.http.middlewares.admin.basicauth.users=<ADD USERS HERE>
+      # - traefik.http.services.traefik.loadbalancer.server.port=8080
+      - traefik.docker.network=traefik-proxy
+      # HTTPS Redirect
+      - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+
+      # Global redirect.
+      - traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)
+      - traefik.http.routers.http-catchall.entrypoints=web
+      - traefik.http.routers.http-catchall.middlewares=https-redirect
+networks:
+  private:
+    name: private
+    external: false
+  traefik-proxy:
+    name: traefik-proxy
+    external: false
